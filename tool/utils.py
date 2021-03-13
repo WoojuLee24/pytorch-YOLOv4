@@ -141,6 +141,23 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
     return img
 
 
+def save_pred_cv2(img, boxes, savename=None, class_names=None, color=None):
+    for i in range(len(boxes)):
+        box = boxes[i]
+        x = (box[2] - box[0]) / 2 + box[0]
+        y = (box[3] - box[1]) / 2 + box[1]
+        w = box[2] - box[0]
+        h = box[3] - box[1]
+        cls_conf = box[5]
+        cls_id = box[6]
+        if savename:
+            print("save prediction results to %s" % savename)
+            with open(savename, 'a') as f:
+                f.write(str(cls_id) +" " + str(x) +" " + str(y) + " " + str(w) +  " " + str(h) + "\n")
+    return img
+
+
+
 def read_truths(lab_path):
     if not os.path.exists(lab_path):
         return np.array([])

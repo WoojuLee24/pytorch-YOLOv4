@@ -22,6 +22,46 @@ import argparse
 """hyper parameters"""
 use_cuda = True
 
+
+def detect_images_cv2(cfgfile, weightfile, imgfolder, savepath):
+    import cv2
+    m = Darknet(cfgfile)
+    m.print_network()
+    m.load_weights(weightfile)
+    print('Loading weights from %s... Done!' % (weightfile))
+
+    if use_cuda:
+        m.cuda()
+
+    num_classes = m.num_classes
+    if num_classes == 20:
+        namesfile = 'data/voc.names'
+    elif num_classes == 80:
+        namesfile = 'data/coco.names'
+    elif num_classes == 7:
+        namesfile = 'data/ADD.names'
+    class_names = load_class_names(namesfile)
+
+    # image list
+    imglist = sorted(os.listdir(imgfolder))
+    for imgfile in imglist:
+        txtname = os.path.join(savepath, os.path.splitext(os.path.basename(imgfile))[0] + ".txt")
+        imgfile = os.path.join(imgfolder, imgfile)
+        img = cv2.imread(imgfile)
+
+        sized = cv2.resize(img, (m.width, m.height))
+        sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
+        for i in range(2):
+            start = time.time()
+            boxes = do_detect(m, sized, 0.4, 0.6, use_cuda)
+            finish = time.time()
+            if i == 1:
+                print('%s: Predicted in %f seconds.' % (imgfile, (finish - start)))
+        save_pred_cv2(img, boxes[0], savename=txtname, class_names=class_names)
+
+        # plot_boxes_cv2(img, boxes[0], savename='/ws/data/team_ksaj/imgname' + '.txt', class_names=class_names)
+
+
 def detect_cv2(cfgfile, weightfile, imgfile):
     import cv2
     m = Darknet(cfgfile)
@@ -38,8 +78,8 @@ def detect_cv2(cfgfile, weightfile, imgfile):
         namesfile = 'data/voc.names'
     elif num_classes == 80:
         namesfile = 'data/coco.names'
-    else:
-        namesfile = 'data/x.names'
+    elif num_classes == 7:
+        namesfile = 'data/ADD.names'
     class_names = load_class_names(namesfile)
 
     img = cv2.imread(imgfile)
@@ -142,19 +182,29 @@ def get_args():
                         default='./checkpoints/Yolov4_epoch1.pth',
                         help='path of trained model.', dest='weightfile')
     parser.add_argument('-imgfile', type=str,
-                        default='./data/mscoco2017/train2017/190109_180343_00154162.jpg',
+                        default='/ws/data/ADD_TEST/1_01_000000_314.jpg',
                         help='path of your image file.', dest='imgfile')
+    parser.add_argument('-imgfolder', type=str,
+                        default='/ws/data/ADD_TEST',
+                        help='path of your image folder.', dest='imgfolder')
+    parser.add_argument('-savepath', type=str,
+                        default='/ws/data/team_ksaj',
+                        help='path of your image folder.', dest='savepath')
     args = parser.parse_args()
 
     return args
 
 
 if __name__ == '__main__':
+    start = time.time()
     args = get_args()
-    if args.imgfile:
-        detect_cv2(args.cfgfile, args.weightfile, args.imgfile)
-        # detect_imges(args.cfgfile, args.weightfile)
-        # detect_cv2(args.cfgfile, args.weightfile, args.imgfile)
-        # detect_skimage(args.cfgfile, args.weightfile, args.imgfile)
+    # if args.imgfile:
+    #    detect_cv2(args.cfgfile, args.weightfile, args.imgfile)
+    # # detect_cv2(args.cfgfile, args.weightfile, args.imgfile)
+    # # detect_skimage(args.cfgfile, args.weightfile, args.imgfile)
+    if args.imgfolder:
+        detect_images_cv2(args.cfgfile, args.weightfile, args.imgfolder, args.savepath)
     else:
         detect_cv2_camera(args.cfgfile, args.weightfile)
+    end = time.time()
+    print("total time: ", end-start)
