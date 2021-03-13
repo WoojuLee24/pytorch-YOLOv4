@@ -141,7 +141,9 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
     return img
 
 
-def save_pred_cv2(img, boxes, savename=None, class_names=None, color=None):
+def save_pred_cv2(boxes, savename=None):
+
+    start = time.time()
     for i in range(len(boxes)):
         box = boxes[i]
         x = (box[2] - box[0]) / 2 + box[0]
@@ -149,12 +151,20 @@ def save_pred_cv2(img, boxes, savename=None, class_names=None, color=None):
         w = box[2] - box[0]
         h = box[3] - box[1]
         cls_conf = box[5]
-        cls_id = box[6]
+        # cls_id = box[6]
+        if box[6] < 2:
+            cls_id = box[6] + 1
+        else:
+            cls_id = box[6] + 2
         if savename:
-            print("save prediction results to %s" % savename)
+            # print("save prediction results to %s" % savename)
             with open(savename, 'a') as f:
                 f.write(str(cls_id) +" " + str(x) +" " + str(y) + " " + str(w) +  " " + str(h) + "\n")
-    return img
+    end = time.time()
+    # print('-----------------------------------')
+    # print('       writing files : %f' % (end-start))
+    # print('-----------------------------------')
+
 
 
 
@@ -241,10 +251,10 @@ def post_processing(img, conf_thresh, nms_thresh, output):
 
     t3 = time.time()
 
-    print('-----------------------------------')
-    print('       max and argmax : %f' % (t2 - t1))
-    print('                  nms : %f' % (t3 - t2))
-    print('Post processing total : %f' % (t3 - t1))
-    print('-----------------------------------')
+    # print('-----------------------------------')
+    # print('       max and argmax : %f' % (t2 - t1))
+    # print('                  nms : %f' % (t3 - t2))
+    # print('Post processing total : %f' % (t3 - t1))
+    # print('-----------------------------------')
     
     return bboxes_batch
