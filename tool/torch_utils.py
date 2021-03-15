@@ -13,6 +13,15 @@ import imghdr  # get_image_size
 from tool import utils 
 
 
+def convert_coordinate(box):
+    c_x = box[:, 0] + (box[:, 2] - box[:, 0]) / 2
+    c_y = box[:, 1] + (box[:, 3] - box[:, 1]) / 2
+    w = box[:, 2] - box[:, 0]
+    h = box[:, 3] - box[:, 1]
+    new_box = torch.cat([c_x, c_y, w, h], dim=1)
+    return new_box
+
+
 def bbox_ious(boxes1, boxes2, x1y1x2y2=True):
     if x1y1x2y2:
         mx = torch.min(boxes1[0], boxes2[0])
@@ -122,3 +131,74 @@ def tensor_detect(model, img, conf_thresh, nms_thresh, use_cuda=1):
     # print('-----------------------------------')
 
     return utils.post_processing(img, conf_thresh, nms_thresh, output)
+
+
+def post_processing(img, conf_thresh, nms_thresh, output):
+    # anchors = [12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401]
+    # num_anchors = 9
+    # anchor_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+    # strides = [8, 16, 32]
+    # anchor_step = len(anchors) // num_anchors
+
+    # [batch, num, 1, 4]
+    box_array = output[0]
+    # [batch, num, num_classes]
+    confs = output[1]
+
+    t1 = time.time()
+
+    # if type(box_array).__name__ != 'ndarray':
+    #     box_array = box_array.cpu().detach().numpy()
+    #     confs = confs.cpu().detach().numpy()
+
+    num_classes = confs.shape[2]
+
+    # [batch, num, 4]
+    box_array = box_array[:, :, 0]
+
+    # [batch, num, num_classes] --> [batch, num]
+    max_conf = torch.max(confs, axis=2)
+    max_id = torch.argmax(confs, axis=2)
+
+    t2 = time.time()
+
+    bboxes_batch = []
+    for i in range(box_array.shape[0]):
+
+        argwhere = max_conf[i] > conf_thresh
+        l_box_array = box_array[i, argwhere, :]
+        l_max_conf = max_conf[i, argwhere]
+        l_max_id = max_id[i, argwhere]
+
+        bboxes = []
+        # nms for each class
+        for j in range(num_classes):
+
+            cls_argwhere = l_max_id == j
+            ll_box_array = l_box_array[cls_argwhere, :]
+            ll_max_conf = l_max_conf[cls_argwhere]
+            ll_max_id = l_max_id[cls_argwhere]
+
+            keep = nms_cpu(ll_box_array, ll_max_conf, nms_thresh)
+
+            if (keep.size > 0):
+                ll_box_array = ll_box_array[keep, :]
+                ll_max_conf = ll_max_conf[keep]
+                ll_max_id = ll_max_id[keep]
+
+                for k in range(ll_box_array.shape[0]):
+                    bboxes.append(
+                        [ll_box_array[k, 0], ll_box_array[k, 1], ll_box_array[k, 2], ll_box_array[k, 3], ll_max_conf[k],
+                         ll_max_conf[k], ll_max_id[k]])
+
+        bboxes_batch.append(bboxes)
+
+    t3 = time.time()
+
+    # print('-----------------------------------')
+    # print('       max and argmax : %f' % (t2 - t1))
+    # print('                  nms : %f' % (t3 - t2))
+    # print('Post processing total : %f' % (t3 - t1))
+    # print('-----------------------------------')
+
+    return bboxes_batch

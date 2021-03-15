@@ -12,6 +12,7 @@
 '''
 import os
 import random
+import glob
 import sys
 
 import cv2
@@ -446,14 +447,49 @@ class ADDDataset(Dataset):
 
     def _prepare_im(self, impath):
         img = cv2.imread(impath)
-        # sized = cv2.resize(img, (800, 600))
-        sized = cv2.resize(img, (608, 800))
+        sized = cv2.resize(img, (800, 608))
+        # sized = cv2.resize(img, (608, 800))
         sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
         return sized
 
     def __getitem__(self, index):
         im = self._prepare_im(self._imdb[index])
         return im, self._imdb[index]
+
+    def __len__(self):
+        return len(self._imdb)
+
+
+class ADDEvalDataset(Dataset):
+    def __init__(self, data_path):
+        assert os.path.exists(data_path), "Data path '{}' not found".format(data_path)
+        self._data_path = data_path
+        self._construct_imdb()
+
+    def _construct_imdb(self):
+        # imglist = sorted(os.listdir(self._data_path))
+        imglist = glob.glob(self._data_path + "/*.jpg")
+        # construct the add db
+        self._imdb = []
+        for imgfile in imglist:
+            impath = os.path.join(self._data_path, imgfile)
+            labelpath = os.path.splitext(impath)[0] + ".txt"
+            self._imdb.append({"im_path": impath, "label_path": labelpath})
+
+    def _prepare_im(self, impath):
+        img = cv2.imread(impath)
+        sized = cv2.resize(img, (800, 608))
+        # sized = cv2.resize(img, (608, 800))
+        sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
+        return sized
+
+    def __getitem__(self, index):
+        im = self._prepare_im(self._imdb[index]["im_path"])
+        f = open(self._imdb[index]["label_path"], 'r')
+        label = f.readlines()[0]
+        label = label[:-1]
+        label = np.asarray(list(map(float, label.split())))
+        return im, label
 
     def __len__(self):
         return len(self._imdb)
