@@ -104,52 +104,61 @@ def do_detect(model, img, conf_thresh, nms_thresh, use_cuda=1):
 
     t2 = time.time()
 
-    # print('-----------------------------------')
-    # print('           Preprocess : %f' % (t1 - t0))
-    # print('      Model Inference : %f' % (t2 - t1))
-    # print('-----------------------------------')
+    print('-----------------------------------')
+    print('           Preprocess : %f' % (t1 - t0))
+    print('      Model Inference : %f' % (t2 - t1))
+    print('-----------------------------------')
 
     return utils.post_processing(img, conf_thresh, nms_thresh, output)
 
 
 def tensor_detect(model, img, conf_thresh, nms_thresh, use_cuda=1):
     model.eval()
-    t0 = time.time()
     if use_cuda:
         img = img.cuda()
     img = img.permute((0, 3, 1, 2)).contiguous().float().div(255.0)
     img = torch.autograd.Variable(img)
-    t1 = time.time()
-
+    # t1 = time.time()
     output = model(img)
-
-    t2 = time.time()
-
+    boxes = utils.post_processing(img, conf_thresh, nms_thresh, output)
+    # t2 = time.time()
     # print('-----------------------------------')
     # print('           Preprocess : %f' % (t1 - t0))
     # print('      Model Inference : %f' % (t2 - t1))
     # print('-----------------------------------')
 
-    return utils.post_processing(img, conf_thresh, nms_thresh, output)
+    return boxes
+
+
+def tensor_detect_time(model, img, conf_thresh, nms_thresh, use_cuda=1):
+    model.eval()
+    if use_cuda:
+        img = img.cuda()
+    img = img.permute((0, 3, 1, 2)).contiguous().float().div(255.0)
+    img = torch.autograd.Variable(img)
+    t1 = time.time()
+    output = model(img)
+    t2 = time.time()
+    boxes = utils.post_processing(img, conf_thresh, nms_thresh, output)
+    # boxes = post_processing(img, conf_thresh, nms_thresh, output)
+    t3 = time.time()
+    # print('-----------------------------------')
+    # print('           Preprocess : %f' % (t1 - t0))
+    # print('      Model Inference : %f' % (t2 - t1))
+    # print('      Postprocess : %f' % (t3 - t1))
+    # print('-----------------------------------')
+
+    return boxes, (t2-t1, t3-t2)
 
 
 def post_processing(img, conf_thresh, nms_thresh, output):
-    # anchors = [12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401]
-    # num_anchors = 9
-    # anchor_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
-    # strides = [8, 16, 32]
-    # anchor_step = len(anchors) // num_anchors
 
     # [batch, num, 1, 4]
     box_array = output[0]
     # [batch, num, num_classes]
     confs = output[1]
 
-    t1 = time.time()
 
-    # if type(box_array).__name__ != 'ndarray':
-    #     box_array = box_array.cpu().detach().numpy()
-    #     confs = confs.cpu().detach().numpy()
 
     num_classes = confs.shape[2]
 
@@ -157,10 +166,15 @@ def post_processing(img, conf_thresh, nms_thresh, output):
     box_array = box_array[:, :, 0]
 
     # [batch, num, num_classes] --> [batch, num]
-    max_conf = torch.max(confs, axis=2)
-    max_id = torch.argmax(confs, axis=2)
+    max_conf, max_id = torch.max(confs, dim=2)
+    # max_id = torch.argmax(confs, dim=2)
 
-    t2 = time.time()
+
+    if type(box_array).__name__ != 'ndarray':
+        box_array = box_array.cpu().detach().numpy()
+        # confs = confs.cpu().detach().numpy()
+        max_conf = max_conf.cpu().detach().numpy()
+        max_id = max_id.cpu().detach().numpy()
 
     bboxes_batch = []
     for i in range(box_array.shape[0]):
@@ -176,10 +190,11 @@ def post_processing(img, conf_thresh, nms_thresh, output):
 
             cls_argwhere = l_max_id == j
             ll_box_array = l_box_array[cls_argwhere, :]
+            # ll_box_array = convert_coordinate(ll_box_array)
             ll_max_conf = l_max_conf[cls_argwhere]
             ll_max_id = l_max_id[cls_argwhere]
 
-            keep = nms_cpu(ll_box_array, ll_max_conf, nms_thresh)
+            keep = utils.nms_cpu(ll_box_array, ll_max_conf, nms_thresh)
 
             if (keep.size > 0):
                 ll_box_array = ll_box_array[keep, :]
@@ -192,13 +207,5 @@ def post_processing(img, conf_thresh, nms_thresh, output):
                          ll_max_conf[k], ll_max_id[k]])
 
         bboxes_batch.append(bboxes)
-
-    t3 = time.time()
-
-    # print('-----------------------------------')
-    # print('       max and argmax : %f' % (t2 - t1))
-    # print('                  nms : %f' % (t3 - t2))
-    # print('Post processing total : %f' % (t3 - t1))
-    # print('-----------------------------------')
 
     return bboxes_batch

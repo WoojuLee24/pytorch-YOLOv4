@@ -11,7 +11,6 @@
 '''
 
 # import sys
-# import time
 # from PIL import Image, ImageDraw
 # from models.tiny_yolo import TinyYoloNet
 from tool.utils import *
@@ -20,13 +19,14 @@ from tool.darknet2pytorch import Darknet
 from dataset import ADDDataset
 from torch.utils.data import DataLoader
 import argparse
+import time
 
 """hyper parameters"""
 use_cuda = True
 
 
 def detect_batch_images_cv2(cfgfile, weightfile, imgfolder, savepath):
-    import cv2
+
     m = Darknet(cfgfile)
     m.print_network()
     m.load_weights(weightfile)
@@ -45,7 +45,7 @@ def detect_batch_images_cv2(cfgfile, weightfile, imgfolder, savepath):
     class_names = load_class_names(namesfile)
 
     dataset = ADDDataset(imgfolder)
-    loader = DataLoader(dataset, batch_size=4, shuffle=False, sampler=None, pin_memory=True, num_workers=4, drop_last=False)
+    loader = DataLoader(dataset, batch_size=8, shuffle=False, sampler=None, pin_memory=True, num_workers=4, drop_last=False)
 
     for cur_iter, (inputs, impath) in enumerate(loader):
         # start = time.time()
@@ -55,6 +55,56 @@ def detect_batch_images_cv2(cfgfile, weightfile, imgfolder, savepath):
             txtname = os.path.join(savepath, os.path.splitext(os.path.basename(impath[b]))[0] + ".txt")
             save_pred_cv2(boxes[b], savename=txtname)
 
+
+def detect_batch_images_cv2_time(cfgfile, weightfile, imgfolder, savepath):
+
+    t0 = time.time()
+    m = Darknet(cfgfile)
+    m.print_network()
+    m.load_weights(weightfile)
+    t1 = time.time()
+
+    print('Loading weights from %s... Done!' % (weightfile))
+
+    if use_cuda:
+        m.cuda()
+
+    num_classes = m.num_classes
+    if num_classes == 20:
+        namesfile = 'data/voc.names'
+    elif num_classes == 80:
+        namesfile = 'data/coco.names'
+    elif num_classes == 7:
+        namesfile = 'data/ADD.names'
+    class_names = load_class_names(namesfile)
+
+    dataset = ADDDataset(imgfolder)
+    loader = DataLoader(dataset, batch_size=8, shuffle=False, sampler=None, pin_memory=True, num_workers=4, drop_last=False)
+
+    model_t = 0
+    post_t = 0
+    write_t = 0
+
+    for cur_iter, (inputs, impath) in enumerate(loader):
+        # start = time.time()
+        boxes, times = tensor_detect_time(m, inputs, 0.4, 0.6, use_cuda)
+        model_t += times[0]
+        post_t += times[1]
+        write_1 = time.time()
+        for b in range(len(boxes)):
+            txtname = os.path.join(savepath, os.path.splitext(os.path.basename(impath[b]))[0] + ".txt")
+            save_pred_cv2(boxes[b], savename=txtname)
+        write_2 = time.time()
+        write_t += write_2 - write_1
+
+    t2 = time.time()
+    data_t = t2 - t1 - model_t - post_t - write_t
+
+    print("model loading time: ", t1 - t0)
+    print("data loading time: ", data_t)
+    print("model inference time: ", model_t)
+    print("data postprocessing time: ", post_t)
+    print("write processing time: ", write_t)
 
 def detect_images_cv2(cfgfile, weightfile, imgfolder, savepath):
     import cv2
@@ -106,6 +156,7 @@ def detect_images_cv2(cfgfile, weightfile, imgfolder, savepath):
 
 def detect_cv2(cfgfile, weightfile, imgfile):
     import cv2
+    start = time.time()
     m = Darknet(cfgfile)
 
     m.print_network()
@@ -114,6 +165,9 @@ def detect_cv2(cfgfile, weightfile, imgfile):
 
     if use_cuda:
         m.cuda()
+
+    end = time.time()
+    print("model laoding time: ", end-start)
 
     num_classes = m.num_classes
     if num_classes == 20:
@@ -124,9 +178,14 @@ def detect_cv2(cfgfile, weightfile, imgfile):
         namesfile = 'data/ADD.names'
     class_names = load_class_names(namesfile)
 
+    start = time.time()
+
     img = cv2.imread(imgfile)
     sized = cv2.resize(img, (m.width, m.height))
     sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
+
+    end = time.time()
+    print("data loading: ", end-start)
 
     for i in range(2):
         start = time.time()
@@ -246,6 +305,8 @@ if __name__ == '__main__':
     # # detect_skimage(args.cfgfile, args.weightfile, args.imgfile)
     if args.imgfolder:
         detect_batch_images_cv2(args.cfgfile, args.weightfile, args.imgfolder, args.savepath)
+        # detect_batch_images_cv2_time(args.cfgfile, args.weightfile, args.imgfolder, args.savepath)
+
     else:
         detect_cv2_camera(args.cfgfile, args.weightfile)
     end = time.time()

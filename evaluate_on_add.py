@@ -45,7 +45,7 @@ def evaluate_batch_images_cv2(cfgfile, weightfile, imgfolder, savepath):
     class_names = load_class_names(namesfile)
 
     dataset = ADDEvalDataset(imgfolder)
-    loader = DataLoader(dataset, batch_size=4, shuffle=False, sampler=None, pin_memory=True, num_workers=4, drop_last=False)
+    loader = DataLoader(dataset, batch_size=4, shuffle=False, sampler=None, pin_memory=True, num_workers=2, drop_last=False)
 
     true_positives = np.zeros(7)
     pred_detected = np.zeros(7)
